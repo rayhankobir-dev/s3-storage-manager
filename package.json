@@ -9,9 +9,24 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@internationalized/date": "^3.12.1",
+    "@react-stately/utils": "^3.12.0",
+    "@tailwindcss/typography": "^0.5.19",
+    "@untitledui/file-icons": "^0.0.9",
+    "@untitledui/icons": "^0.0.22",
+    "input-otp": "^1.4.2",
+    "motion": "^12.38.0",
     "next": "16.2.6",
+    "next-themes": "^0.4.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-aria": "^3.48.0",
+    "react-aria-components": "^1.17.0",
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss-animate": "^1.0.7",
+    "tailwindcss-react-aria-components": "^2.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -20,6 +35,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "postcss": "^8.5.14",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
