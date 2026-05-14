@@ -5,19 +5,26 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "db:generate": "npx drizzle-kit generate",
+    "db:migrate": "npx drizzle-kit migrate",
+    "db:push": "npx drizzle-kit push",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1047.0",
     "@internationalized/date": "^3.12.1",
     "@react-stately/utils": "^3.12.0",
     "@tailwindcss/typography": "^0.5.19",
     "@untitledui/file-icons": "^0.0.9",
     "@untitledui/icons": "^0.0.22",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
     "input-otp": "^1.4.2",
     "motion": "^12.38.0",
     "next": "16.2.6",
     "next-themes": "^0.4.6",
+    "pg": "^8.20.0",
     "react": "19.2.4",
     "react-aria": "^3.48.0",
     "react-aria-components": "^1.17.0",
@@ -31,12 +38,15 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "postcss": "^8.5.14",
     "tailwindcss": "^4",
+    "tsx": "^4.22.0",
     "typescript": "^5"
   },
   "ignoreScripts": [
