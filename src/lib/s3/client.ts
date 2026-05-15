@@ -1,5 +1,6 @@
 import "server-only";
 import { S3Client } from "@aws-sdk/client-s3";
+import { unsealConnection } from "@/lib/credentials/vault";
 import type { Connection } from "./types";
 
 export const CREDENTIALS_HEADER = "x-storage-credentials";
@@ -32,44 +33,19 @@ export class CredentialsError extends Error {
     }
 }
 
+/**
+ * Parse the sealed credentials token from the request and decrypt it in memory.
+ * The header carries an AES-256-GCM ciphertext minted by /api/credentials/seal;
+ * raw credentials never appear on the wire after the initial seal handshake.
+ */
 export function parseCredentials(request: Request): Connection {
     const header = request.headers.get(CREDENTIALS_HEADER);
     if (!header) {
         throw new CredentialsError("Missing storage credentials header");
     }
-
-    let decoded: string;
     try {
-        decoded = atob(header);
+        return unsealConnection(header);
     } catch {
-        throw new CredentialsError("Credentials header is not valid base64");
+        throw new CredentialsError("Storage credentials are invalid or expired. Reconnect to continue.");
     }
-
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(decoded);
-    } catch {
-        throw new CredentialsError("Credentials header is not valid JSON");
-    }
-
-    if (!parsed || typeof parsed !== "object") {
-        throw new CredentialsError("Credentials must be an object");
-    }
-
-    const obj = parsed as Record<string, unknown>;
-    const required = ["bucket", "accessKeyId", "secretAccessKey"] as const;
-    for (const key of required) {
-        if (typeof obj[key] !== "string" || (obj[key] as string).length === 0) {
-            throw new CredentialsError(`Credentials missing field: ${key}`);
-        }
-    }
-
-    return {
-        bucket: obj.bucket as string,
-        accessKeyId: obj.accessKeyId as string,
-        secretAccessKey: obj.secretAccessKey as string,
-        accountId: typeof obj.accountId === "string" ? obj.accountId : undefined,
-        endpoint: typeof obj.endpoint === "string" ? obj.endpoint : undefined,
-        region: typeof obj.region === "string" ? obj.region : undefined,
-    };
 }

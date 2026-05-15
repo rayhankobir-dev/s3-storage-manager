@@ -6,7 +6,7 @@ import { Download01, Share01 } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
-import { encodeCredentialsHeader, useConnection } from "@/stores/connection";
+import { useConnection } from "@/stores/connection";
 import { friendlyMimeType, humanSize, inferFileIconType } from "@/lib/file-type";
 import { previewKind, type PreviewKind } from "@/lib/preview";
 
@@ -25,13 +25,13 @@ type Loaded =
     | { kind: "none" };
 
 export function PreviewModal({ isOpen, onOpenChange, objectKey, name, size, onShare }: Props) {
-    const { connection } = useConnection();
+    const { credentialsHeader } = useConnection();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loaded, setLoaded] = useState<Loaded | null>(null);
 
     useEffect(() => {
-        if (!isOpen || !objectKey || !connection) {
+        if (!isOpen || !objectKey || !credentialsHeader) {
             setLoaded(null);
             setError(null);
             return;
@@ -55,7 +55,7 @@ export function PreviewModal({ isOpen, onOpenChange, objectKey, name, size, onSh
                         method: "POST",
                         headers: {
                             "content-type": "application/json",
-                            "x-storage-credentials": encodeCredentialsHeader(connection),
+                            "x-storage-credentials": credentialsHeader,
                         },
                         body: JSON.stringify({ key: objectKey }),
                     });
@@ -75,7 +75,7 @@ export function PreviewModal({ isOpen, onOpenChange, objectKey, name, size, onSh
                         method: "POST",
                         headers: {
                             "content-type": "application/json",
-                            "x-storage-credentials": encodeCredentialsHeader(connection),
+                            "x-storage-credentials": credentialsHeader,
                         },
                         body: JSON.stringify({ key: objectKey }),
                     });
@@ -96,15 +96,15 @@ export function PreviewModal({ isOpen, onOpenChange, objectKey, name, size, onSh
         return () => {
             cancelled = true;
         };
-    }, [isOpen, objectKey, connection]);
+    }, [isOpen, objectKey, credentialsHeader]);
 
     async function handleDownload() {
-        if (!connection || !objectKey) return;
+        if (!credentialsHeader || !objectKey) return;
         const response = await fetch("/api/objects/download-url", {
             method: "POST",
             headers: {
                 "content-type": "application/json",
-                "x-storage-credentials": encodeCredentialsHeader(connection),
+                "x-storage-credentials": credentialsHeader,
             },
             body: JSON.stringify({ key: objectKey }),
         });

@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type PropsWithChildren } from "react";
-import type { Connection } from "@/lib/s3/types";
+import type { ConnectionPreview, SealedConnection } from "@/lib/credentials/types";
 
-const STORAGE_KEY = "object-storage:connection";
+const STORAGE_KEY = "object-storage:sealed-v1";
 const subscribers = new Set<() => void>();
 
 function subscribe(callback: () => void): () => void {
@@ -39,29 +39,41 @@ function useHydrated(): boolean {
 
 type ConnectionContextValue = {
     status: Status;
-    connection: Connection | null;
-    setConnection: (connection: Connection) => void;
+    /** Non-secret preview fields safe to render in the UI. */
+    connection: ConnectionPreview | null;
+    /** Opaque encrypted token to send as the x-storage-credentials header. */
+    credentialsHeader: string | null;
+    setSealed: (sealed: SealedConnection) => void;
     clearConnection: () => void;
 };
 
 const ConnectionContext = createContext<ConnectionContextValue | null>(null);
 
+function parseStored(raw: string | null): SealedConnection | null {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw) as SealedConnection;
+        if (
+            parsed &&
+            typeof parsed.token === "string" &&
+            parsed.preview &&
+            typeof parsed.preview.bucket === "string"
+        ) {
+            return parsed;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
 export function ConnectionProvider({ children }: PropsWithChildren) {
     const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     const hydrated = useHydrated();
 
-    const connection = useMemo<Connection | null>(() => {
-        if (!raw) return null;
-        try {
-            const parsed = JSON.parse(raw) as Connection;
-            if (parsed && typeof parsed.bucket === "string") return parsed;
-        } catch {
-            return null;
-        }
-        return null;
-    }, [raw]);
+    const sealed = useMemo(() => parseStored(raw), [raw]);
 
-    const setConnection = useCallback((next: Connection) => {
+    const setSealed = useCallback((next: SealedConnection) => {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         notify();
     }, []);
@@ -73,12 +85,13 @@ export function ConnectionProvider({ children }: PropsWithChildren) {
 
     const value = useMemo<ConnectionContextValue>(
         () => ({
-            status: !hydrated ? "idle" : connection ? "ready" : "missing",
-            connection,
-            setConnection,
+            status: !hydrated ? "idle" : sealed ? "ready" : "missing",
+            connection: sealed?.preview ?? null,
+            credentialsHeader: sealed?.token ?? null,
+            setSealed,
             clearConnection,
         }),
-        [hydrated, connection, setConnection, clearConnection],
+        [hydrated, sealed, setSealed, clearConnection],
     );
 
     return <ConnectionContext.Provider value={value}>{children}</ConnectionContext.Provider>;
@@ -92,16 +105,13 @@ export function useConnection(): ConnectionContextValue {
     return ctx;
 }
 
-export function encodeCredentialsHeader(connection: Connection): string {
-    if (typeof window === "undefined") {
-        return Buffer.from(JSON.stringify(connection), "utf-8").toString("base64");
-    }
-    return btoa(JSON.stringify(connection));
-}
-
-export async function storageFetch(connection: Connection, input: string, init: RequestInit = {}): Promise<Response> {
+export async function storageFetch(
+    credentialsHeader: string,
+    input: string,
+    init: RequestInit = {},
+): Promise<Response> {
     const headers = new Headers(init.headers);
-    headers.set("x-storage-credentials", encodeCredentialsHeader(connection));
+    headers.set("x-storage-credentials", credentialsHeader);
     if (init.body && !headers.has("content-type") && !(init.body instanceof FormData)) {
         headers.set("content-type", "application/json");
     }

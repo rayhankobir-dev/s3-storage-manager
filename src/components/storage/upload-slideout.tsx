@@ -6,7 +6,7 @@ import { Button } from "@/components/base/buttons/button";
 import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
 import { FileUpload, FileListItemProgressBar } from "@/components/application/file-upload/file-upload-base";
 import { SlideoutMenu } from "@/components/application/slideout-menus/slideout-menu";
-import { encodeCredentialsHeader, useConnection } from "@/stores/connection";
+import { useConnection } from "@/stores/connection";
 import { inferFileIconType } from "@/lib/file-type";
 
 type QueuedFile = {
@@ -32,7 +32,7 @@ function makeId(): string {
 }
 
 export function UploadSlideout({ isOpen, onOpenChange, prefix, onUploaded, pendingFiles }: Props) {
-    const { connection } = useConnection();
+    const { credentialsHeader } = useConnection();
     const [items, setItems] = useState<QueuedFile[]>([]);
     const itemsRef = useRef(items);
     itemsRef.current = items;
@@ -43,7 +43,7 @@ export function UploadSlideout({ isOpen, onOpenChange, prefix, onUploaded, pendi
 
     const uploadOne = useCallback(
         async (id: string, file: File) => {
-            if (!connection) return;
+            if (!credentialsHeader) return;
             setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "uploading", progress: 0, error: undefined } : i)));
 
             try {
@@ -55,7 +55,7 @@ export function UploadSlideout({ isOpen, onOpenChange, prefix, onUploaded, pendi
                 await new Promise<void>((resolve, reject) => {
                     const xhr = new XMLHttpRequest();
                     xhr.open("POST", "/api/objects/upload");
-                    xhr.setRequestHeader("x-storage-credentials", encodeCredentialsHeader(connection));
+                    xhr.setRequestHeader("x-storage-credentials", credentialsHeader);
                     xhr.upload.onprogress = (event) => {
                         if (event.lengthComputable) {
                             const progress = Math.round((event.loaded / event.total) * 100);
@@ -90,7 +90,7 @@ export function UploadSlideout({ isOpen, onOpenChange, prefix, onUploaded, pendi
                 setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "failed", error: message, xhr: undefined } : i)));
             }
         },
-        [connection, prefix, onUploaded],
+        [credentialsHeader, prefix, onUploaded],
     );
 
     const addFiles = useCallback(

@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
-import { encodeCredentialsHeader, useConnection } from "@/stores/connection";
+import { useConnection } from "@/stores/connection";
 import type { Connection } from "@/lib/s3/types";
+import type { SealedConnection } from "@/lib/credentials/types";
 
 const EMPTY: Connection = {
   bucket: "",
@@ -19,7 +20,7 @@ const EMPTY: Connection = {
 };
 
 export function ConnectForm() {
-  const { setConnection } = useConnection();
+  const { setSealed } = useConnection();
   const [form, setForm] = useState<Connection>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,11 +55,10 @@ export function ConnectForm() {
         return;
       }
 
-      const response = await fetch("/api/connection/test", {
+      const response = await fetch("/api/credentials/seal", {
         method: "POST",
-        headers: {
-          "x-storage-credentials": encodeCredentialsHeader(candidate),
-        },
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(candidate),
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as {
@@ -67,8 +67,13 @@ export function ConnectForm() {
         toast.error(body?.error || `Connection failed (${response.status})`);
         return;
       }
-      toast.success(`Connected to ${candidate.bucket}`);
-      setConnection(candidate);
+      const sealed = (await response.json()) as SealedConnection;
+      if (!sealed?.token || !sealed?.preview) {
+        toast.error("Server did not return sealed credentials.");
+        return;
+      }
+      toast.success(`Connected to ${sealed.preview.bucket}`);
+      setSealed(sealed);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Connection failed");
     } finally {
@@ -88,8 +93,8 @@ export function ConnectForm() {
             Connect a bucket
           </h1>
           <p className="mt-1 text-sm text-tertiary">
-            Credentials live in this browser tab only — they're sent with each
-            request, never persisted on the server.
+            Credentials are encrypted on the server and never stored in
+            plaintext in this browser. Only a sealed token lives in localStorage.
           </p>
         </div>
       </div>

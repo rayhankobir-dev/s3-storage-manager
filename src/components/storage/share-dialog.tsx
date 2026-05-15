@@ -8,7 +8,7 @@ import { Input } from "@/components/base/input/input";
 import { Toggle } from "@/components/base/toggle/toggle";
 import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
-import { encodeCredentialsHeader, useConnection } from "@/stores/connection";
+import { useConnection } from "@/stores/connection";
 import { cx } from "@/utils/cx";
 
 type Props = {
@@ -30,7 +30,7 @@ const EXPIRY_OPTIONS: ExpiryOption[] = [
 ];
 
 export function ShareDialog({ isOpen, onOpenChange, objectKey, name }: Props) {
-    const { connection } = useConnection();
+    const { credentialsHeader } = useConnection();
     const [expiryId, setExpiryId] = useState<string>("24h");
     const [usePassword, setUsePassword] = useState(false);
     const [password, setPassword] = useState("");
@@ -54,7 +54,7 @@ export function ShareDialog({ isOpen, onOpenChange, objectKey, name }: Props) {
     const expiry = useMemo(() => EXPIRY_OPTIONS.find((o) => o.id === expiryId) ?? EXPIRY_OPTIONS[1], [expiryId]);
 
     async function handleGenerate() {
-        if (!connection || !objectKey) return;
+        if (!credentialsHeader || !objectKey) return;
         setSubmitting(true);
         setError(null);
         try {
@@ -62,7 +62,7 @@ export function ShareDialog({ isOpen, onOpenChange, objectKey, name }: Props) {
                 method: "POST",
                 headers: {
                     "content-type": "application/json",
-                    "x-storage-credentials": encodeCredentialsHeader(connection),
+                    "x-storage-credentials": credentialsHeader,
                 },
                 body: JSON.stringify({
                     key: objectKey,

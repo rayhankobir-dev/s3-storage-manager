@@ -17,7 +17,7 @@ import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-ic
 import { LoadingIndicator } from "@/components/application/loading-indicator/loading-indicator";
 import { Input } from "@/components/base/input/input";
 import { storageFetch, useConnection } from "@/stores/connection";
-import type { Connection, ListResult } from "@/lib/s3/types";
+import type { ListResult } from "@/lib/s3/types";
 
 export type TransferMode = "copy" | "move";
 
@@ -52,7 +52,7 @@ function leafOfPrefix(prefix: string): string {
 }
 
 export function DestinationPicker({ isOpen, onOpenChange, mode, selection, onDone }: Props) {
-    const { connection } = useConnection();
+    const { connection, credentialsHeader } = useConnection();
     const [current, setCurrent] = useState("");
     const [listing, setListing] = useState<ListResult | null>(null);
     const [loading, setLoading] = useState(false);
@@ -75,11 +75,11 @@ export function DestinationPicker({ isOpen, onOpenChange, mode, selection, onDon
     }, [isOpen, selection]);
 
     const fetchListing = useCallback(
-        async (conn: Connection, prefix: string) => {
+        async (token: string, prefix: string) => {
             setLoading(true);
             setError(null);
             try {
-                const response = await storageFetch(conn, `/api/objects?prefix=${encodeURIComponent(prefix)}`);
+                const response = await storageFetch(token, `/api/objects?prefix=${encodeURIComponent(prefix)}`);
                 if (!response.ok) {
                     const body = (await response.json().catch(() => null)) as { error?: string } | null;
                     throw new Error(body?.error || `Failed to list (${response.status})`);
@@ -97,10 +97,10 @@ export function DestinationPicker({ isOpen, onOpenChange, mode, selection, onDon
     );
 
     useEffect(() => {
-        if (!isOpen || !connection) return;
+        if (!isOpen || !credentialsHeader) return;
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        void fetchListing(connection, current);
-    }, [isOpen, connection, current, fetchListing]);
+        void fetchListing(credentialsHeader, current);
+    }, [isOpen, credentialsHeader, current, fetchListing]);
 
     const segments = current.length === 0 ? [] : current.replace(/\/$/, "").split("/");
     const folders = listing?.folders ?? [];
@@ -130,12 +130,12 @@ export function DestinationPicker({ isOpen, onOpenChange, mode, selection, onDon
         !isDescendantOfSource(current);
 
     async function handleCreateFolder() {
-        if (!connection) return;
+        if (!credentialsHeader) return;
         const cleaned = newFolderName.trim().replace(/^\/+|\/+$/g, "");
         if (!cleaned) return;
         const newPrefix = `${current}${cleaned}/`;
         try {
-            const response = await storageFetch(connection, "/api/objects/folder", {
+            const response = await storageFetch(credentialsHeader, "/api/objects/folder", {
                 method: "POST",
                 body: JSON.stringify({ prefix: newPrefix }),
             });
@@ -152,11 +152,11 @@ export function DestinationPicker({ isOpen, onOpenChange, mode, selection, onDon
     }
 
     async function handleSubmit() {
-        if (!connection || !selection) return;
+        if (!credentialsHeader || !selection) return;
         setSubmitting(true);
         setError(null);
         try {
-            const response = await storageFetch(connection, "/api/objects/transfer", {
+            const response = await storageFetch(credentialsHeader, "/api/objects/transfer", {
                 method: "POST",
                 body: JSON.stringify({
                     mode,

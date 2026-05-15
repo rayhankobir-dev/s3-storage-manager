@@ -117,7 +117,7 @@ const CATEGORIES: Array<{
 ];
 
 export function FileBrowser() {
-  const { connection, clearConnection } = useConnection();
+  const { connection, credentialsHeader, clearConnection } = useConnection();
   const [prefix, setPrefix] = useState("");
   const [listing, setListing] = useState<ListResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -159,12 +159,12 @@ export function FileBrowser() {
   } | null>(null);
 
   const fetchListing = useCallback(async () => {
-    if (!connection) return;
+    if (!credentialsHeader) return;
     setLoading(true);
     setError(null);
     try {
       const response = await storageFetch(
-        connection,
+        credentialsHeader,
         `/api/objects?prefix=${encodeURIComponent(prefix)}`,
       );
       if (!response.ok) {
@@ -182,7 +182,7 @@ export function FileBrowser() {
     } finally {
       setLoading(false);
     }
-  }, [connection, prefix]);
+  }, [credentialsHeader, prefix]);
 
   useEffect(() => {
     // Standard data-fetch-on-dep-change pattern; setState happens inside the awaited callback.
@@ -282,11 +282,11 @@ export function FileBrowser() {
   }
 
   async function handleCreateFolder(name: string) {
-    if (!connection) return;
+    if (!credentialsHeader) return;
     const newPrefix = joinPrefix(prefix, name);
     setBusy(true);
     try {
-      const response = await storageFetch(connection, "/api/objects/folder", {
+      const response = await storageFetch(credentialsHeader, "/api/objects/folder", {
         method: "POST",
         body: JSON.stringify({ prefix: newPrefix }),
       });
@@ -306,11 +306,11 @@ export function FileBrowser() {
   }
 
   async function handleDownload(key: string) {
-    if (!connection) return;
+    if (!credentialsHeader) return;
     setBusy(true);
     try {
       const response = await storageFetch(
-        connection,
+        credentialsHeader,
         "/api/objects/download-url",
         {
           method: "POST",
@@ -337,11 +337,11 @@ export function FileBrowser() {
     prefixes: string[];
     name: string;
   }) {
-    if (!connection) return;
+    if (!credentialsHeader) return;
     setBusy(true);
     try {
       const response = await storageFetch(
-        connection,
+        credentialsHeader,
         "/api/objects/download-zip/prepare",
         {
           method: "POST",
@@ -367,14 +367,14 @@ export function FileBrowser() {
   }
 
   async function handleRename(value: string) {
-    if (!connection || !renameTarget) return;
+    if (!credentialsHeader || !renameTarget) return;
     const { row } = renameTarget;
     const source = row.target;
     const destination =
       row.kind === "folder" ? joinPrefix(prefix, value) : `${prefix}${value}`;
     setBusy(true);
     try {
-      const response = await storageFetch(connection, "/api/objects/move", {
+      const response = await storageFetch(credentialsHeader, "/api/objects/move", {
         method: "POST",
         body: JSON.stringify({
           source,
@@ -398,7 +398,7 @@ export function FileBrowser() {
   }
 
   async function handleDelete() {
-    if (!connection || !deleteTarget) return;
+    if (!credentialsHeader || !deleteTarget) return;
     let body: { keys?: string[]; prefixes?: string[] };
     if (deleteTarget.kind === "single-object")
       body = { keys: [deleteTarget.key] };
@@ -408,7 +408,7 @@ export function FileBrowser() {
 
     setBusy(true);
     try {
-      const response = await storageFetch(connection, "/api/objects", {
+      const response = await storageFetch(credentialsHeader, "/api/objects", {
         method: "DELETE",
         body: JSON.stringify(body),
       });
