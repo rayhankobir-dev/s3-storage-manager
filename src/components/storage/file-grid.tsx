@@ -1,9 +1,9 @@
 "use client";
 
 import { FileIcon } from "@untitledui/file-icons";
-import { Download01, Edit01, Eye, Folder, Share01, Trash01 } from "@untitledui/icons";
-import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Archive, Copy01, Download01, Edit01, Eye, Folder, Move, Share01, Trash01 } from "@untitledui/icons";
 import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { cx } from "@/utils/cx";
 import { friendlyMimeType, humanSize, inferFileIconType } from "@/lib/file-type";
 import { isPreviewable } from "@/lib/preview";
@@ -27,6 +27,9 @@ type Props = {
     onRename: (row: GridRow) => void;
     onDelete: (row: GridRow) => void;
     onPreview?: (row: GridRow) => void;
+    onCopy?: (row: GridRow) => void;
+    onMove?: (row: GridRow) => void;
+    onDownloadZip?: (row: GridRow) => void;
     isBusy?: boolean;
 };
 
@@ -40,6 +43,9 @@ export function FileGrid({
     onRename,
     onDelete,
     onPreview,
+    onCopy,
+    onMove,
+    onDownloadZip,
     isBusy,
 }: Props) {
     return (
@@ -47,6 +53,7 @@ export function FileGrid({
             {rows.map((row) => {
                 const isSelected = selected.has(row.id);
                 const isFolder = row.kind === "folder";
+                const previewable = !isFolder && isPreviewable(row.target);
                 const meta = isFolder
                     ? "Folder"
                     : `${friendlyMimeType(row.target)}${row.size !== null ? ` · ${humanSize(row.size)}` : ""}`;
@@ -68,7 +75,7 @@ export function FileGrid({
                         onDoubleClick={(event) => {
                             const target = event.target as HTMLElement;
                             if (target.closest("[data-grid-action]") || target.closest("[data-grid-checkbox]")) return;
-                            if (!isFolder && onPreview && isPreviewable(row.target)) {
+                            if (!isFolder && onPreview && previewable) {
                                 onPreview(row);
                             }
                         }}
@@ -91,55 +98,62 @@ export function FileGrid({
 
                         <div
                             data-grid-action
-                            className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100"
+                            className="absolute top-1.5 right-1.5 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100"
                             onClick={(event) => event.stopPropagation()}
                         >
-                            {!isFolder && (
-                                <>
-                                    {onPreview && isPreviewable(row.target) && (
-                                        <ButtonUtility
-                                            size="xs"
-                                            color="tertiary"
-                                            icon={Eye}
-                                            tooltip="Preview"
-                                            isDisabled={isBusy}
-                                            onClick={() => onPreview(row)}
-                                        />
-                                    )}
-                                    <ButtonUtility
-                                        size="xs"
-                                        color="tertiary"
-                                        icon={Download01}
-                                        tooltip="Download"
-                                        isDisabled={isBusy}
-                                        onClick={() => onDownload(row.target)}
-                                    />
-                                    <ButtonUtility
-                                        size="xs"
-                                        color="tertiary"
-                                        icon={Share01}
-                                        tooltip="Share"
-                                        isDisabled={isBusy}
-                                        onClick={() => onShare(row)}
-                                    />
-                                </>
-                            )}
-                            <ButtonUtility
-                                size="xs"
-                                color="tertiary"
-                                icon={Edit01}
-                                tooltip="Rename"
-                                isDisabled={isBusy}
-                                onClick={() => onRename(row)}
-                            />
-                            <ButtonUtility
-                                size="xs"
-                                color="tertiary"
-                                icon={Trash01}
-                                tooltip="Delete"
-                                isDisabled={isBusy}
-                                onClick={() => onDelete(row)}
-                            />
+                            <Dropdown.Root>
+                                <Dropdown.DotsButton
+                                    aria-label={`Actions for ${row.name}`}
+                                    isDisabled={isBusy}
+                                    className="rounded-md bg-primary/80 p-1 ring-1 ring-secondary backdrop-blur-sm hover:bg-secondary"
+                                />
+                                <Dropdown.Popover className="w-48">
+                                    <Dropdown.Menu
+                                        onAction={(key) => {
+                                            switch (key) {
+                                                case "preview":
+                                                    if (onPreview) onPreview(row);
+                                                    break;
+                                                case "download":
+                                                    onDownload(row.target);
+                                                    break;
+                                                case "share":
+                                                    onShare(row);
+                                                    break;
+                                                case "copy":
+                                                    if (onCopy) onCopy(row);
+                                                    break;
+                                                case "move":
+                                                    if (onMove) onMove(row);
+                                                    break;
+                                                case "zip":
+                                                    if (onDownloadZip) onDownloadZip(row);
+                                                    break;
+                                                case "rename":
+                                                    onRename(row);
+                                                    break;
+                                                case "delete":
+                                                    onDelete(row);
+                                                    break;
+                                            }
+                                        }}
+                                    >
+                                        {!isFolder && previewable && onPreview ? (
+                                            <Dropdown.Item id="preview" icon={Eye} label="Preview" />
+                                        ) : null}
+                                        {!isFolder ? <Dropdown.Item id="download" icon={Download01} label="Download" /> : null}
+                                        {!isFolder ? <Dropdown.Item id="share" icon={Share01} label="Share link" /> : null}
+                                        {onCopy ? <Dropdown.Item id="copy" icon={Copy01} label="Copy to…" /> : null}
+                                        {onMove ? <Dropdown.Item id="move" icon={Move} label="Move to…" /> : null}
+                                        {isFolder && onDownloadZip ? (
+                                            <Dropdown.Item id="zip" icon={Archive} label="Download as zip" />
+                                        ) : null}
+                                        <Dropdown.Item id="rename" icon={Edit01} label="Rename" />
+                                        <Dropdown.Separator />
+                                        <Dropdown.Item id="delete" icon={Trash01} label="Delete" />
+                                    </Dropdown.Menu>
+                                </Dropdown.Popover>
+                            </Dropdown.Root>
                         </div>
 
                         {isFolder ? (

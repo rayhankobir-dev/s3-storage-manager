@@ -205,6 +205,27 @@ export async function moveKey(client: S3Client, conn: Connection, sourceKey: str
     await deleteKeys(client, conn, [sourceKey]);
 }
 
+export async function copyPrefix(client: S3Client, conn: Connection, sourcePrefix: string, destinationPrefix: string): Promise<void> {
+    if (sourcePrefix === destinationPrefix) return;
+    let continuationToken: string | undefined;
+    do {
+        const response = await client.send(
+            new ListObjectsV2Command({
+                Bucket: conn.bucket,
+                Prefix: sourcePrefix,
+                ContinuationToken: continuationToken,
+                MaxKeys: 1000,
+            }),
+        );
+        const sources = (response.Contents ?? []).map((c) => c.Key).filter((k): k is string => Boolean(k));
+        for (const source of sources) {
+            const dest = `${destinationPrefix}${source.slice(sourcePrefix.length)}`;
+            await copyKey(client, conn, source, dest);
+        }
+        continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+}
+
 export async function movePrefix(client: S3Client, conn: Connection, sourcePrefix: string, destinationPrefix: string): Promise<void> {
     if (sourcePrefix === destinationPrefix) return;
     let continuationToken: string | undefined;

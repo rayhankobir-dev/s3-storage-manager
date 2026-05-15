@@ -6,6 +6,8 @@ import {
   ChevronDown,
   ChevronRight,
   Code01,
+  Archive,
+  Copy01,
   Download01,
   Edit01,
   Eye,
@@ -18,6 +20,7 @@ import {
   Image01,
   LayoutAlt01,
   LogOut01,
+  Move,
   MusicNote01,
   RefreshCw01,
   Rows01,
@@ -27,6 +30,7 @@ import {
   Upload01,
   UploadCloud02,
   VideoRecorder,
+  XClose,
 } from "@untitledui/icons";
 import type { Selection, SortDescriptor } from "react-aria-components";
 import { Button } from "@/components/base/buttons/button";
@@ -35,12 +39,18 @@ import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { Input } from "@/components/base/input/input";
 import { EmptyState } from "@/components/application/empty-state/empty-state";
 import { Table, TableCard } from "@/components/application/table/table";
+import { CloudIllustration } from "@/components/shared-assets/illustrations/cloud";
+import { BackgroundPattern } from "@/components/shared-assets/background-patterns";
 import {
   ConfirmDialog,
   TextInputDialog,
 } from "@/components/storage/storage-dialogs";
+import {
+  DestinationPicker,
+  type TransferMode,
+  type TransferSelection,
+} from "@/components/storage/destination-picker";
 import { FileGrid, type GridRow } from "@/components/storage/file-grid";
-import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
 import { PreviewModal } from "@/components/storage/preview-modal";
 import { ShareDialog } from "@/components/storage/share-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -140,8 +150,13 @@ export function FileBrowser() {
     files: File[];
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [dragFileCount, setDragFileCount] = useState(0);
   const dragCounter = useRef(0);
   const [category, setCategory] = useState<FileCategory | "all">("all");
+  const [transfer, setTransfer] = useState<{
+    mode: TransferMode;
+    selection: TransferSelection;
+  } | null>(null);
 
   const fetchListing = useCallback(async () => {
     if (!connection) return;
@@ -317,6 +332,40 @@ export function FileBrowser() {
     }
   }
 
+  async function handleDownloadZip(args: {
+    keys: string[];
+    prefixes: string[];
+    name: string;
+  }) {
+    if (!connection) return;
+    setBusy(true);
+    try {
+      const response = await storageFetch(
+        connection,
+        "/api/objects/download-zip/prepare",
+        {
+          method: "POST",
+          body: JSON.stringify(args),
+        },
+      );
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error || "Failed to prepare zip");
+      }
+      const { token } = (await response.json()) as { token: string };
+      // Navigate to the streaming endpoint — Content-Disposition triggers a
+      // save dialog and the browser streams the body straight to disk.
+      const url = `/api/objects/download-zip?token=${encodeURIComponent(token)}`;
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Zip download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleRename(value: string) {
     if (!connection || !renameTarget) return;
     const { row } = renameTarget;
@@ -419,6 +468,23 @@ export function FileBrowser() {
     });
   }
 
+  function selectedAsTransfer(): TransferSelection {
+    const keys: string[] = [];
+    const prefixes: string[] = [];
+    for (const id of selectedIds) {
+      const row = rows.find((r) => r.id === id);
+      if (!row) continue;
+      if (row.kind === "folder") prefixes.push(row.target);
+      else keys.push(row.target);
+    }
+    return {
+      keys,
+      prefixes,
+      sourcePrefix: prefix,
+      summary: `${selectedCounts.total} item${selectedCounts.total === 1 ? "" : "s"}`,
+    };
+  }
+
   const segments =
     prefix.length === 0 ? [] : prefix.replace(/\/$/, "").split("/");
 
@@ -436,7 +502,11 @@ export function FileBrowser() {
     if (!hasFileDrag(event)) return;
     event.preventDefault();
     dragCounter.current += 1;
-    if (dragCounter.current === 1) setIsDragging(true);
+    if (dragCounter.current === 1) {
+      setIsDragging(true);
+      // dataTransfer.items.length gives a count during dragenter on most browsers.
+      setDragFileCount(event.dataTransfer.items?.length ?? 0);
+    }
   }
 
   function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
@@ -449,7 +519,10 @@ export function FileBrowser() {
   function handleDragLeave(event: React.DragEvent<HTMLDivElement>) {
     if (!hasFileDrag(event)) return;
     dragCounter.current = Math.max(0, dragCounter.current - 1);
-    if (dragCounter.current === 0) setIsDragging(false);
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+      setDragFileCount(0);
+    }
   }
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -457,6 +530,7 @@ export function FileBrowser() {
     event.preventDefault();
     dragCounter.current = 0;
     setIsDragging(false);
+    setDragFileCount(0);
     const files = Array.from(event.dataTransfer.files);
     if (files.length === 0) return;
     setPendingUpload({ token: Date.now(), files });
@@ -465,44 +539,66 @@ export function FileBrowser() {
 
   return (
     <>
-      <div
-        className="relative mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 sm:p-6"
+      <main
+        className="relative mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 md:p-6 sm:p-4"
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {isDragging && (
-          <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-overlay/70 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-brand bg-primary px-10 py-8 text-center shadow-xl">
-              <FeaturedIcon
-                icon={UploadCloud02}
-                color="brand"
-                theme="light"
-                size="lg"
+          <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-overlay/70 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="relative flex flex-col items-center gap-4 overflow-hidden rounded-3xl border-2 border-dashed border-brand bg-primary px-12 py-10 text-center shadow-2xl animate-in zoom-in-95 fade-in duration-200">
+              <BackgroundPattern
+                pattern="grid"
+                size="md"
+                className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-60 [mask-image:radial-gradient(circle_at_center,black,transparent_75%)]"
               />
-              <div>
-                <p className="text-lg font-semibold text-primary">
+              <div className="relative">
+                <CloudIllustration
+                  size="lg"
+                  className="motion-safe:animate-pulse"
+                />
+                <div className="absolute inset-x-0 top-1/3 flex justify-center">
+                  <UploadCloud02 className="size-12 text-fg-brand-primary motion-safe:animate-bounce" />
+                </div>
+              </div>
+              <div className="relative">
+                <p className="text-2xl font-semibold text-primary">
                   Drop to upload
                 </p>
                 <p className="mt-1 text-sm text-tertiary">
-                  Files will land in{" "}
-                  <span className="font-medium text-secondary">
-                    {prefix || "/"}
+                  {dragFileCount > 0 ? (
+                    <>
+                      <span className="font-medium text-secondary">
+                        {dragFileCount} {dragFileCount === 1 ? "item" : "items"}
+                      </span>{" "}
+                      will land in{" "}
+                    </>
+                  ) : (
+                    <>Files will land in </>
+                  )}
+                  <span className="font-mono text-xs px-2 py-0.5 rounded bg-secondary text-primary ring-1 ring-secondary_alt">
+                    {connection?.bucket}
+                    {prefix ? `/${prefix}` : "/"}
                   </span>
                 </p>
               </div>
+              <p className="relative text-xs text-quaternary">
+                Release to start uploading · Esc to cancel
+              </p>
             </div>
           </div>
         )}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between py-1.5 px-6 rounded-xl bg-secondary_alt border border-secondary">
+
+        <header className="sticky top-0 z-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between py-3 px-4 rounded-xl bg-secondary_alt border border-secondary">
           <div className="min-w-0">
-            <h3 className="truncate text-lg font-semibold text-primary">
+            <h3 className="truncate text-lg leading-none font-semibold text-primary">
               {connection?.bucket}
             </h3>
             <p className="truncate text-xs text-tertiary">
               {connection?.accountId
-                ? `Cloudflare R2 · account ${connection.accountId.slice(0, 8)}…`
+                ? `account ${connection.accountId.slice(0, 8)}…`
                 : connection?.endpoint || "S3-compatible storage"}
             </p>
           </div>
@@ -526,8 +622,8 @@ export function FileBrowser() {
           </div>
         </header>
 
-        <section className="space-y-4 p-6 border border-secondary rounded-2xl bg-secondary_alt">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <section className="space-y-4 border border-secondary rounded-2xl bg-secondary_alt">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center px-6 pt-6">
             <Input
               placeholder="Filter by name"
               icon={SearchMd}
@@ -570,7 +666,7 @@ export function FileBrowser() {
             </Dropdown.Root>
           </div>
 
-          <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6">
             <nav
               aria-label="Breadcrumbs"
               className="flex min-w-0 flex-wrap items-center gap-1 text-sm"
@@ -657,35 +753,80 @@ export function FileBrowser() {
           </section>
 
           {selectedCounts.total > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-secondary px-4 py-2 text-sm">
-              <span>
+            <div className="flex gap-2 rounded-lg bg-brand-primary_alt px-3 mx-3 py-2 ring ring-secondary text-sm flex-row items-center sm:justify-between sm:px-4">
+              <span className="min-w-0">
                 <span className="font-semibold text-primary">
                   {selectedCounts.total}
                 </span>{" "}
                 selected
                 {selectedCounts.prefixes > 0 && (
-                  <span className="text-tertiary">
+                  <span className="hidden text-tertiary sm:inline">
                     {" "}
                     · folders include all contents
                   </span>
                 )}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="-mx-1 flex flex-wrap items-center gap-1 sm:mx-0 sm:gap-2">
                 <Button
                   color="tertiary"
                   size="sm"
+                  iconLeading={XClose}
+                  aria-label="Clear selection"
                   onClick={() => setSelected(new Set<string>())}
-                >
-                  Clear
-                </Button>
+                ></Button>
+                <Button
+                  color="secondary"
+                  size="sm"
+                  iconLeading={Copy01}
+                  aria-label="Copy selection to another folder"
+                  onClick={() =>
+                    setTransfer({
+                      mode: "copy",
+                      selection: selectedAsTransfer(),
+                    })
+                  }
+                ></Button>
+                <Button
+                  color="secondary"
+                  size="sm"
+                  iconLeading={Move}
+                  aria-label="Move selection to another folder"
+                  onClick={() =>
+                    setTransfer({
+                      mode: "move",
+                      selection: selectedAsTransfer(),
+                    })
+                  }
+                ></Button>
+                <Button
+                  color="secondary"
+                  size="sm"
+                  iconLeading={Archive}
+                  aria-label="Download selection as a zip"
+                  onClick={() => {
+                    const sel = selectedAsTransfer();
+                    const baseName =
+                      sel.keys.length + sel.prefixes.length === 1
+                        ? (sel.prefixes[0] ?? sel.keys[0])
+                            .replace(/\/$/, "")
+                            .split("/")
+                            .pop() || "download"
+                        : `${connection?.bucket ?? "download"}-${sel.keys.length + sel.prefixes.length}-items`;
+                    void handleDownloadZip({
+                      keys: sel.keys,
+                      prefixes: sel.prefixes,
+                      name: baseName,
+                    });
+                  }}
+                ></Button>
                 <Button
                   color="primary-destructive"
                   size="sm"
                   iconLeading={Trash01}
+                  aria-label="Delete selection"
                   onClick={openBulkDelete}
-                >
-                  Delete
-                </Button>
+                  className="ml-auto sm:ml-0"
+                ></Button>
               </div>
             </div>
           )}
@@ -699,7 +840,7 @@ export function FileBrowser() {
             </div>
           )}
 
-          <TableCard.Root>
+          <TableCard.Root className=" rounded-t-none">
             {isEmpty ? (
               <div className="px-4 py-16 sm:px-6">
                 <EmptyState size="md">
@@ -776,6 +917,35 @@ export function FileBrowser() {
                     key: row.target,
                     name: row.name,
                     size: row.size,
+                  })
+                }
+                onCopy={(row) =>
+                  setTransfer({
+                    mode: "copy",
+                    selection: {
+                      keys: row.kind === "object" ? [row.target] : [],
+                      prefixes: row.kind === "folder" ? [row.target] : [],
+                      sourcePrefix: prefix,
+                      summary: `“${row.name}”`,
+                    },
+                  })
+                }
+                onMove={(row) =>
+                  setTransfer({
+                    mode: "move",
+                    selection: {
+                      keys: row.kind === "object" ? [row.target] : [],
+                      prefixes: row.kind === "folder" ? [row.target] : [],
+                      sourcePrefix: prefix,
+                      summary: `“${row.name}”`,
+                    },
+                  })
+                }
+                onDownloadZip={(row) =>
+                  void handleDownloadZip({
+                    keys: [],
+                    prefixes: [row.target],
+                    name: row.name.replace(/\/$/, "") || "download",
                   })
                 }
                 isBusy={busy}
@@ -919,19 +1089,96 @@ export function FileBrowser() {
                           <ButtonUtility
                             size="xs"
                             color="tertiary"
-                            icon={Edit01}
-                            tooltip="Rename"
-                            isDisabled={busy}
-                            onClick={() => setRenameTarget({ row })}
-                          />
-                          <ButtonUtility
-                            size="xs"
-                            color="tertiary"
                             icon={Trash01}
                             tooltip="Delete"
                             isDisabled={busy}
                             onClick={() => openDeleteFor(row)}
                           />
+                          <Dropdown.Root>
+                            <Dropdown.DotsButton
+                              aria-label={`More actions for ${row.name}`}
+                              isDisabled={busy}
+                              className="p-1"
+                            />
+                            <Dropdown.Popover className="w-52">
+                              <Dropdown.Menu
+                                onAction={(key) => {
+                                  if (key === "copy") {
+                                    setTransfer({
+                                      mode: "copy",
+                                      selection: {
+                                        keys:
+                                          row.kind === "object"
+                                            ? [row.target]
+                                            : [],
+                                        prefixes:
+                                          row.kind === "folder"
+                                            ? [row.target]
+                                            : [],
+                                        sourcePrefix: prefix,
+                                        summary: `“${row.name}”`,
+                                      },
+                                    });
+                                  } else if (key === "move") {
+                                    setTransfer({
+                                      mode: "move",
+                                      selection: {
+                                        keys:
+                                          row.kind === "object"
+                                            ? [row.target]
+                                            : [],
+                                        prefixes:
+                                          row.kind === "folder"
+                                            ? [row.target]
+                                            : [],
+                                        sourcePrefix: prefix,
+                                        summary: `“${row.name}”`,
+                                      },
+                                    });
+                                  } else if (key === "rename") {
+                                    setRenameTarget({ row });
+                                  } else if (key === "zip") {
+                                    void handleDownloadZip({
+                                      keys:
+                                        row.kind === "object"
+                                          ? [row.target]
+                                          : [],
+                                      prefixes:
+                                        row.kind === "folder"
+                                          ? [row.target]
+                                          : [],
+                                      name:
+                                        row.name.replace(/\/$/, "") ||
+                                        "download",
+                                    });
+                                  }
+                                }}
+                              >
+                                <Dropdown.Item
+                                  id="copy"
+                                  icon={Copy01}
+                                  label="Copy to…"
+                                />
+                                <Dropdown.Item
+                                  id="move"
+                                  icon={Move}
+                                  label="Move to…"
+                                />
+                                <Dropdown.Item
+                                  id="rename"
+                                  icon={Edit01}
+                                  label="Rename"
+                                />
+                                {row.kind === "folder" && (
+                                  <Dropdown.Item
+                                    id="zip"
+                                    icon={Archive}
+                                    label="Download as zip"
+                                  />
+                                )}
+                              </Dropdown.Menu>
+                            </Dropdown.Popover>
+                          </Dropdown.Root>
                         </div>
                       </Table.Cell>
                     </Table.Row>
@@ -948,7 +1195,7 @@ export function FileBrowser() {
             </p>
           )}
         </section>
-      </div>
+      </main>
 
       <UploadSlideout
         isOpen={uploadOpen}
@@ -975,7 +1222,7 @@ export function FileBrowser() {
         }
         label="Folder name"
         placeholder="reports"
-        submitLabel="Create"
+        submitLabel="Create Folder"
         isBusy={busy}
         onSubmit={handleCreateFolder}
       />
@@ -1049,6 +1296,17 @@ export function FileBrowser() {
         onShare={(key, name) => {
           setPreviewTarget(null);
           setShareTarget({ key, name });
+        }}
+      />
+
+      <DestinationPicker
+        isOpen={transfer !== null}
+        onOpenChange={(open) => !open && setTransfer(null)}
+        mode={transfer?.mode ?? "copy"}
+        selection={transfer?.selection ?? null}
+        onDone={() => {
+          setTransfer(null);
+          void fetchListing();
         }}
       />
     </>
