@@ -19,7 +19,7 @@ function notify() {
 
 function getSnapshot(): string | null {
     if (typeof window === "undefined") return null;
-    return window.sessionStorage.getItem(STORAGE_KEY);
+    return window.localStorage.getItem(STORAGE_KEY);
 }
 
 function getServerSnapshot(): string | null {
@@ -62,12 +62,12 @@ export function ConnectionProvider({ children }: PropsWithChildren) {
     }, [raw]);
 
     const setConnection = useCallback((next: Connection) => {
-        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         notify();
     }, []);
 
     const clearConnection = useCallback(() => {
-        window.sessionStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem(STORAGE_KEY);
         notify();
     }, []);
 
